@@ -51,6 +51,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.HadoopIllegalArgumentException;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.classification.InterfaceAudience;
 import org.apache.hadoop.hbase.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -77,7 +78,7 @@ import org.mortbay.jetty.handler.ContextHandlerCollection;
 import org.mortbay.jetty.handler.HandlerCollection;
 import org.mortbay.jetty.handler.RequestLogHandler;
 import org.mortbay.jetty.nio.SelectChannelConnector;
-import org.mortbay.jetty.security.SslSocketConnector;
+import org.mortbay.jetty.security.*;
 import org.mortbay.jetty.servlet.Context;
 import org.mortbay.jetty.servlet.DefaultServlet;
 import org.mortbay.jetty.servlet.FilterHolder;
@@ -376,6 +377,36 @@ public class HttpServer implements FilterContainer {
       }
 
       HttpServer server = new HttpServer(this);
+
+      /** 添加安全访问 开始 */
+      Configuration configuration = HBaseConfiguration.create();
+      String isAuth = configuration.get("hz.hbase.http.auth.enabled", "false");
+      String username = configuration.get("hz.hbase.http.auth.username", "teligen");
+      String password = configuration.get("hz.hbase.http.auth.password", "Thinker@123");
+      if (Boolean.parseBoolean(isAuth)) {
+
+        SecurityHandler securityHandler = server.getWebAppContext().getSecurityHandler();
+        HashUserRealm userRealm = new HashUserRealm("teligenRealm");
+        userRealm.setRefreshInterval(5);
+
+        userRealm.put(username, password);
+        userRealm.addUserToRole(username, "root");
+
+        BasicAuthenticator basicAuthenticator = new BasicAuthenticator();
+        securityHandler.setAuthenticator(basicAuthenticator);
+
+        ConstraintMapping constraintMapping = new ConstraintMapping();
+        Constraint constraint = new Constraint("teligenRealm", "root");
+        constraint.setAuthenticate(true);
+        constraintMapping.setConstraint(constraint);
+        constraintMapping.getConstraint().setName("teligenRealm");
+        constraintMapping.getConstraint().setRoles(new String[]{"root", "root"});
+        constraintMapping.setPathSpec("/*");
+        securityHandler.setConstraintMappings(new ConstraintMapping[]{constraintMapping});
+
+        securityHandler.setUserRealm(userRealm);
+      }
+      /** 添加安全访问 结束 */
 
       if (this.securityEnabled) {
         server.initSpnego(conf, hostName, usernameConfKey, keytabConfKey, kerberosNameRulesKey,
